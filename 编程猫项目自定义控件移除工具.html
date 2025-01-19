@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编程猫项目自定义控件移除工具</title>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        body{
+            padding: 32px;
+            margin: 0;
+        }
+
+        h1 {
+            margin: 0;
+            text-align: center;
+        }
+
+        #loginForm {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #password {
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            padding: 8px;
+            outline: none;
+            border-radius: 8px;
+            width: 300px;
+        }
+
+        #username {
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            padding: 8px;
+            border-radius: 8px;
+            width: 300px;
+            outline: none;
+        }
+
+        .b {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 300px;
+            text-align: center;
+            border: none;
+        }
+
+        #output {
+            margin-top: 20px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>编程猫项目自定义控件移除工具</h1>
+    <form id="loginForm">
+        <label for="username">编程猫用户名:</label><br>
+        <input type="text" id="username" required><br>
+        <label for="password">编程猫密码:</label><br>
+        <input type="password" id="password" required><br>
+        <button type="submit" class="b">登录</button>
+    </form>
+
+    <div id="output"></div>
+
+    <script>
+        async function codemao_update_file(file, uuid, jwt) {
+            try {
+                let url = `https://coco.codemao.cn/http-widget-proxy/https@SEP@open-service.codemao.cn/cdn/qi-niu/tokens/uploading?projectName=appcraft&filePaths=appcraft/WIDREMOVER_${uuid}.json&filePath=appcraft/WIDREMOVER_${uuid}.json&tokensCount=1&fileSign=p1&insertOnly=true&cdnName=qiniu`;
+                let header = {
+                    "Cookie": `authorization=${jwt}`,
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.67"
+                };
+                let token_res = await axios.get(url, { headers: header });
+                let token_data = token_res.data;
+                let token = token_data["tokens"][0]["token"];
+                let filename = token_data["tokens"][0]['file_path'];
+                let upload_url = "https://upload.qiniup.com/";
+
+                // 使用 FormData 自动处理边界参数
+                let formData = new FormData();
+                formData.append('token', token);
+                formData.append('key', filename);
+                formData.append('fname', 'test.json');
+                formData.append('file', JSON.stringify(file));
+
+                // 删除手动设置的 Content-Type，让浏览器自动设置
+                delete header['Content-Type'];
+
+                console.log(upload_url, formData, header);
+                let upload_res = await axios.post(upload_url, formData, { headers: header });
+                let upload_data = upload_res.data;
+                return upload_data["key"];
+            } catch (error) {
+                console.error("codemao_update_file 错误:", error);
+                throw error;
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            document.getElementById('output').innerText = '登录中...';
+
+            try {
+                let udata_response = await axios.post("https://api.codemao.cn/tiger/v3/web/accounts/login", {
+                    pid: "7KeVbBdw",
+                    identity: username,
+                    password: password
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    withCredentials: true
+                });
+
+                console.log("登录响应:", udata_response.data);
+                let udata = udata_response.data;
+                let token = udata.auth.token;
+
+                let work_id = prompt('请输入您项目的WorkID:');
+                if (!work_id) {
+                    throw new Error('WorkID 不能为空');
+                }
+
+                let work_data_response = await axios.get(`https://coco.codemao.cn/http-widget-proxy/https@SEP@api-creation.codemao.cn/coconut/web/work/${work_id}/content`, {
+                    headers: {
+                        'Cookie': 'authorization=' + token
+                    },
+                    withCredentials: true
+                });
+                console.log("获取工作数据响应:", work_data_response.data);
+                let work_data = work_data_response.data;
+                let bcm_url_response = await axios.get(work_data.data.data.bcm_url, {
+                    headers: {
+                        'Cookie': 'authorization=' + token
+                    },
+                    withCredentials: true
+                });
+                console.log("获取 BCM 数据响应:", bcm_url_response.data);
+                let work_json_data = bcm_url_response.data;
+
+                let widget_types = [];
+                work_json_data.unsafeExtensionWidgetList.forEach(element => {
+                    widget_types.push({ title: element.type, value: element.type });
+                });
+
+                let widget_remove_choices = widget_types.map(w => w.value).join(', ');
+                let widget_removes_input = prompt(`选择你要移除的自定义控件（用逗号分隔）:\nAvailable options: ${widget_remove_choices}`);
+                let widget_removes = widget_removes_input.split(',').map(s => s.trim());
+
+                work_json_data.unsafeExtensionWidgetList = work_json_data.unsafeExtensionWidgetList.filter(element => !widget_removes.includes(element.type));
+
+                let work_pos = await codemao_update_file(work_json_data, Date.now(), token);
+
+                document.getElementById('output').innerText = '上传中...';
+                let wdata_response = await axios.get("https://creation.codemao.cn/" + work_pos);
+                console.log("上传文件响应:", wdata_response.data);
+                let wdata = wdata_response.data;
+                let data_response = await axios.put("https://api-creation.codemao.cn/coconut/web/work", {
+                    archive_version: "0.1.0",
+                    bcm_url: "https://creation.codemao.cn/" + work_pos,
+                    id: work_id,
+                    name: wdata["title"],
+                    preview_url: work_json_data.screens[work_json_data.screenIds[0]].snapshot,
+                    save_type: 1
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cookie': 'authorization=' + token
+                    },
+                    withCredentials: true
+                });
+                console.log("更新工作数据响应:", data_response.data);
+
+                if (data_response.status === 200) {
+                    document.getElementById('output').innerText = '移除成功';
+                } else {
+                    document.getElementById('output').innerText = '移除失败';
+                }
+            } catch (error) {
+                document.getElementById('output').innerText = error.message;
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
