@@ -113,7 +113,7 @@
             document.getElementById('output').innerText = '登录中...';
 
             try {
-                let udata_response = await axios.post("https://api.codemao.cn/tiger/v3/web/accounts/login", {
+                let udata_response = await axios.post("https://coco.codemao.cn/http-widget-proxy/https@SEP@api.codemao.cn/tiger/v3/web/accounts/login", {
                     pid: "7KeVbBdw",
                     identity: username,
                     password: password
@@ -164,10 +164,10 @@
                 let work_pos = await codemao_update_file(work_json_data, Date.now(), token);
 
                 document.getElementById('output').innerText = '上传中...';
-                let wdata_response = await axios.get("https://creation.codemao.cn/" + work_pos);
+                let wdata_response = await axios.get("https://coco.codemao.cn/http-widget-proxy/https@SEP@creation.codemao.cn/" + work_pos);
                 console.log("上传文件响应:", wdata_response.data);
                 let wdata = wdata_response.data;
-                let data_response = await axios.put("https://api-creation.codemao.cn/coconut/web/work", {
+                let data_response = await axios.put("https://coco.codemao.cn/http-widget-proxy/https@SEP@api-creation.codemao.cn/coconut/web/work", {
                     archive_version: "0.1.0",
                     bcm_url: "https://creation.codemao.cn/" + work_pos,
                     id: work_id,
